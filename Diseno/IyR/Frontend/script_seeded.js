@@ -10,7 +10,7 @@ import {
   esMovimientoValido,
 } from "./Libreria/src/index.js";
 
-// ===== Difficulty settings (UI labels) =====
+// ===== Difficulty settings (UI labelss) =====
 const difficultyLevels = [
   { key: "muy-facil", label: "Principiante", givens: 48 },
   { key: "facil", label: "Iniciado", givens: 42 },
