@@ -8,7 +8,8 @@ import {
   crearNotasVacias,
   limpiarNotasCelda,
   esMovimientoValido,
-} from "./Libreria/src/index.js";
+  toggleNota,
+} from "https://esm.sh/@uninorte/cerebro-sudoku@1.1.0";
 
 // ===== Difficulty settings (UI labelss) =====
 const difficultyLevels = [
@@ -80,7 +81,7 @@ const modeDetailTitle = document.getElementById("mode-detail-title");
 const modeDetailList = document.getElementById("mode-detail-list");
 
 // ===== Runtime state =====
-
+let noteMode = false; // 
 let seconds = 0;
 let activeTheme = "light";
 let timerInterval = null;
@@ -117,25 +118,25 @@ const seedsPorDificultad = {
     { seed: 996827, huecos: 40 },
   ],
   Avanzado: [
-    { seed: 880642, huecos: 40 },
-    { seed: 237309, huecos: 40 },
-    { seed: 708446, huecos: 40 },
-    { seed: 793078, huecos: 40 },
-    { seed: 548659, huecos: 40 },
+    { seed: 978497, huecos: 45 },
+    { seed: 637366, huecos: 45 },
+    { seed: 187073, huecos: 45 },
+    { seed: 324083, huecos: 45 },
+    { seed: 273520, huecos: 45 }
   ],
   Experto: [
-    { seed: 306753, huecos: 40 },
-    { seed: 766397, huecos: 40 },
-    { seed: 787320, huecos: 40 },
-    { seed: 597254, huecos: 40 },
-    { seed: 902005, huecos: 40 },
+    { seed: 73866, huecos: 50 },
+    { seed: 786485, huecos: 50 },
+    { seed: 461137, huecos: 50 },
+    { seed: 695902, huecos: 50 },
+    { seed: 187073, huecos: 50 }
   ],
   Profesional: [
-    { seed: 509429, huecos: 40 },
-    { seed: 347472, huecos: 40 },
-    { seed: 459935, huecos: 40 },
-    { seed: 890624, huecos: 40 },
-    { seed: 305046, huecos: 40 },
+    { seed: 542597, huecos: 60 },
+    { seed: 109576, huecos: 60 },
+    { seed: 336169, huecos: 60 },
+    { seed: 73866, huecos: 60 },
+    { seed: 81387, huecos: 60 }
   ],
 };
 
@@ -588,6 +589,72 @@ function fillSelected(value) {
   setStatus("Movimiento aplicado");
 }
 
+function setNoteMode(on) {
+  noteMode = !!on;
+  setStatus(noteMode ? "Modo notas: ACTIVADO (N para desactivar)" : "Modo notas: desactivado");
+}
+
+function renderCellContent(cellEl, r, c) {
+  const isPrefilled = puzzleInicial[r][c] !== 0;
+  const value = tableroActual[r][c];
+
+  cellEl.classList.remove("has-notes");
+  cellEl.innerHTML = ""; // usamos innerHTML porque vamos a meter notas en grid
+
+  if (isPrefilled) {
+    cellEl.textContent = String(value);
+    cellEl.classList.add("prefilled");
+    return;
+  }
+
+  // si hay número definitivo
+  if (value !== 0) {
+    cellEl.textContent = String(value);
+    return;
+  }
+
+  // si no hay número, mostramos notas (si existen)
+  const cellNotes = notas?.[r]?.[c];
+  if (cellNotes && cellNotes.size > 0) {
+    cellEl.classList.add("has-notes");
+
+    const wrap = document.createElement("div");
+    wrap.className = "notes-grid";
+
+    for (let n = 1; n <= 9; n += 1) {
+      const item = document.createElement("div");
+      item.className = "note";
+      item.textContent = cellNotes.has(n) ? String(n) : "";
+      wrap.appendChild(item);
+    }
+
+    cellEl.appendChild(wrap);
+  }
+}
+
+function handleNoteInput(num) {
+  if (!selectedCell) return;
+
+  const row = Number(selectedCell.dataset.row);
+  const col = Number(selectedCell.dataset.col);
+
+  // no notas en celdas fijas
+  if (puzzleInicial[row][col] !== 0) {
+    setStatus("No puedes poner notas en una celda fija.");
+    return;
+  }
+
+  const res = toggleNota(notas, tableroActual, row, col, num);
+
+  if (!res.ok) {
+    setStatus(res.mensaje || "No se pudo actualizar la nota.");
+    return;
+  }
+
+  // Renderiza solo esa celda
+  renderCellContent(selectedCell, row, col);
+  setStatus(res.accion === "agregada" ? `Nota ${num} agregada.` : `Nota ${num} eliminada.`);
+}
 
 function createBoard() {
   boardEl.innerHTML = "";
@@ -607,20 +674,15 @@ function createBoard() {
       if ((c + 1) % 3 === 0 && c !== 8) cell.classList.add("block-right");
       if ((r + 1) % 3 === 0 && r !== 8) cell.classList.add("block-bottom");
 
-      const value = tableroActual[r][c];
+      // ✅ render número o notas
+      renderCellContent(cell, r, c);
 
-      if (isPrefilled) {
-        cell.textContent = String(value);
-        cell.classList.add("prefilled");
-      } else {
-        cell.textContent = value === 0 ? "" : String(value);
-
-        
+      // ✅ si es editable y tiene número, marcar error si viola reglas
+      if (!isPrefilled) {
+        const value = tableroActual[r][c];
         if (value !== 0) {
           const valido = esMovimientoValido(tableroActual, r, c, value);
-          if (!valido) {
-            cell.classList.add("error");
-          }
+          cell.classList.toggle("error", !valido);
         }
       }
 
@@ -634,7 +696,6 @@ function createBoard() {
     }
   }
 }
-
 
 function createSignBoard() {
   const letters = ["S", "U", "", "D", "O", "K", "", "U", ""];
@@ -757,7 +818,12 @@ function createKeypad() {
     btn.type = "button";
     btn.className = "chip number";
     btn.textContent = n;
-    btn.addEventListener("click", () => fillSelected(n));
+
+    btn.addEventListener("click", () => {
+      if (noteMode) handleNoteInput(n);
+      else fillSelected(n);
+    });
+
     keypadEl.appendChild(btn);
   }
 }
@@ -806,6 +872,7 @@ function loadDifficulty(levelKey) {
 // ===== App events =====
 function setupControls() {
   clearBtn.addEventListener("click", () => fillSelected(""));
+
   hintBtn.addEventListener("click", () => {
     const resultado = darPistaAleatoria(tableroActual, solucion);
 
@@ -818,6 +885,9 @@ function setupControls() {
     const { row, col, valor } = resultado;
     tableroActual[row][col] = valor;
 
+    // Si existían notas en esa celda, se limpian
+    if (notas) limpiarNotasCelda(notas, row, col);
+
     createBoard();
     updateProgress();
 
@@ -829,10 +899,47 @@ function setupControls() {
     }
   });
 
+  // ✅ Controles teclado: números / borrar / modo notas
   document.addEventListener("keydown", (event) => {
-    if (!selectedCell || selectedCell.dataset.prefilled === "true") return;
-    if (/^[1-9]$/.test(event.key)) fillSelected(event.key);
-    if (event.key === "Backspace" || event.key === "Delete") fillSelected("");
+    if (!selectedCell) return;
+
+    const row = Number(selectedCell.dataset.row);
+    const col = Number(selectedCell.dataset.col);
+
+    // Toggle modo notas con N
+    if (event.key.toLowerCase() === "n") {
+      noteMode = !noteMode;
+      setStatus(noteMode ? "Modo notas: ACTIVADO (N para desactivar)" : "Modo notas: desactivado");
+      return;
+    }
+
+    // No permitir editar celdas fijas
+    if (selectedCell.dataset.prefilled === "true") return;
+
+    // Números 1-9
+    if (/^[1-9]$/.test(event.key)) {
+      const num = Number(event.key);
+
+      // Shift+num o modo notas -> notas
+      if (noteMode || event.shiftKey) {
+        handleNoteInput(num);
+      } else {
+        fillSelected(event.key);
+      }
+      return;
+    }
+
+    // Borrar
+    if (event.key === "Backspace" || event.key === "Delete") {
+      if (noteMode) {
+        // borrar notas
+        if (notas) limpiarNotasCelda(notas, row, col);
+        renderCellContent(selectedCell, row, col);
+        setStatus("Notas eliminadas.");
+      } else {
+        fillSelected("");
+      }
+    }
   });
 
   difficultySelect.addEventListener("change", (event) => {
